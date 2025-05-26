@@ -46,23 +46,36 @@ class ScreenRecorder:
     def record_loop(self):
         self.out = cv2.VideoWriter(
             self.output_file, self.fourcc, self.fps, self.screen_size)
+        
+        frame_duration = 1.0 / self.fps  # Time per frame in seconds
+        next_frame_time = time.time()
 
         while self.recording:
+            current_time = time.time()
+            
             # Capture screenshot
             img = pyautogui.screenshot()
-
+            
             # Draw custom cursor
             img = self.draw_cursor(img)
-
+            
             # Convert to numpy array and change color space for OpenCV
             frame = np.array(img)
             frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-
+            
             # Write frame to video
             self.out.write(frame)
-
-            # Control FPS
-            time.sleep(1/self.fps)
+            
+            # Calculate sleep time for next frame
+            next_frame_time += frame_duration
+            sleep_time = next_frame_time - time.time()
+            
+            # Only sleep if we're ahead of schedule
+            if sleep_time > 0:
+                time.sleep(sleep_time)
+            else:
+                # We're behind schedule, update next_frame_time
+                next_frame_time = time.time()
 
     def start(self):
         if not self.recording:

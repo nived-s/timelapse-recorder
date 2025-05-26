@@ -86,10 +86,8 @@ class TimeLapseRecorder:
     
     def start_recording(self):
         # Create output directory if it doesn't exist
-        os.makedirs('recordings', exist_ok=True)
-
-        # Get current time and format it as HHMM_DDMMYY
-        current_time = time.strftime("%H%M_%d%m%y")
+        os.makedirs('recordings', exist_ok=True)        # Get current time and format it as HHMMSS_DDMMYY
+        current_time = time.strftime("%H%M%S_%d%m%y")
         output_file = os.path.join(
             'recordings', f'recording_{current_time}.mp4')
         self.recorder = ScreenRecorder(output_file=output_file, fps=10)
