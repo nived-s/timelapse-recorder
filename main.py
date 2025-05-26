@@ -1,8 +1,8 @@
 import tkinter as tk
 from tkinter import ttk, PhotoImage
 from rec_screen import ScreenRecorder
+from speedup import TimeLapseConverter
 import os
-import time
 import time
 
 
@@ -13,6 +13,10 @@ class TimeLapseRecorder:
         self.root.geometry("800x600")
         self.root.attributes('-alpha', 0.9)        # Initialize recorder
         self.recorder = None
+
+        # Initialize timelapse converter
+        self.converter = TimeLapseConverter(speed_factor=10)
+        self.current_recording_path = None
 
         # Set window icon
         icon = PhotoImage(file="resources/cursor.png")
@@ -60,7 +64,8 @@ class TimeLapseRecorder:
         self.display_combobox['values'] = ['Display 1']
         self.display_combobox.set('Display 1')
         self.display_combobox.grid(
-            row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))        # Create Start button with initial green style
+            # Create Start button with initial green style
+            row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
         self.start_button = tk.Button(
             self.controls_frame,
             text="Start",
@@ -82,18 +87,26 @@ class TimeLapseRecorder:
         if self.start_button['text'] == "Start":
             self.start_recording()
         else:
-            self.stop_recording()    
-    
+            self.stop_recording()
+
     def start_recording(self):
         # Create output directory if it doesn't exist
-        os.makedirs('recordings', exist_ok=True)        # Get current time and format it as HHMMSS_DDMMYY
+        os.makedirs('recordings', exist_ok=True)
+
+        # Get current time and format it as HHMMSS_DDMMYY
         current_time = time.strftime("%H%M%S_%d%m%y")
-        output_file = os.path.join(
-            'recordings', f'recording_{current_time}.mp4')
-        self.recorder = ScreenRecorder(output_file=output_file, fps=10)
+
+        # Create temporary file for raw recording
+        temp_file = os.path.join('recordings', f'temp_{current_time}.mp4')
+        self.current_recording_path = temp_file
+
+        # Initialize recorder with temporary file
+        self.recorder = ScreenRecorder(output_file=temp_file, fps=10)
 
         # Start recording
-        self.recorder.start()        # Update button text and colors
+        self.recorder.start()
+
+        # Update button text and colors
         self.start_button['text'] = "Stop"
         self.start_button['bg'] = '#f44336'  # Material Design Red
         self.start_button['activebackground'] = '#d32f2f'
@@ -101,7 +114,25 @@ class TimeLapseRecorder:
     def stop_recording(self):
         if self.recorder:
             self.recorder.stop()
+
+            # Convert to timelapse if we have a recording
+            if self.current_recording_path and os.path.exists(self.current_recording_path):
+                try:
+                    # Create final timelapse file name
+                    final_file = self.current_recording_path.replace(
+                        'temp_', 'timelapse_')
+
+                    # Convert to timelapse
+                    self.converter.convert(
+                        self.current_recording_path, final_file)
+
+                    # Delete temporary file
+                    os.remove(self.current_recording_path)
+                except Exception as e:
+                    print(f"Error creating timelapse: {e}")
+
             self.recorder = None
+            self.current_recording_path = None
 
         # Update button text and colors
         self.start_button['text'] = "Start"
