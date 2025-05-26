@@ -2,3 +2,5 @@ opencv-python
 pyautogui
 numpy
 pillow
+screeninfo
+mss

@@ -5,12 +5,20 @@ from speedup import TimeLapseConverter
 import os
 import time
 import json
+from screeninfo import get_monitors
+import mss
+from PIL import ImageTk, Image
 
 CONFIG_FILE = "config.json"
 
 
 class TimeLapseRecorder:
     def __init__(self):
+        # Initialize display related variables
+        self.available_displays = []
+        self.current_display = None
+        self.screen_capture = mss.mss()
+        
         self.root = tk.Tk()
         self.root.title("Time Lapse Recorder")
         self.root.geometry("800x600")
@@ -22,9 +30,7 @@ class TimeLapseRecorder:
 
         # Initialize timelapse converter
         self.converter = TimeLapseConverter(speed_factor=10)
-        self.current_recording_path = None
-
-        # Set window icon
+        self.current_recording_path = None        # Set window icon
         icon = PhotoImage(file="resources/cursor.png")
         self.root.iconphoto(False, icon)
         # Prevent window resizing (width, height)
@@ -70,7 +76,12 @@ class TimeLapseRecorder:
         self.display_combobox['values'] = ['Display 1']
         self.display_combobox.set('Display 1')
         self.display_combobox.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
-
+          # Bind display selection change
+        self.display_combobox.bind('<<ComboboxSelected>>', self.on_display_change)
+        
+        # Initialize displays after creating combobox
+        self.initialize_displays()
+        
         # Create path selection label and entry
         self.path_label = ttk.Label(self.controls_frame, text="Output Path:")
         self.path_label.grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=(10, 0))
@@ -113,7 +124,81 @@ class TimeLapseRecorder:
 
         # Configure controls frame grid
         self.controls_frame.columnconfigure(0, weight=1)
-        self.controls_frame.columnconfigure(1, weight=0)
+        self.controls_frame.columnconfigure(1, weight=0)    
+    
+    def initialize_displays(self):
+        """Initialize and store information about all available displays"""
+        try:
+            # Get all monitors using screeninfo
+            monitors = get_monitors()
+            
+            # Store display information
+            self.available_displays = []
+            for i, monitor in enumerate(monitors):
+                display_info = {
+                    'id': i,
+                    'name': f"Display {i+1}",
+                    'width': monitor.width,
+                    'height': monitor.height,
+                    'x': monitor.x,
+                    'y': monitor.y,
+                    'is_primary': monitor.is_primary,
+                    'geometry': {
+                        'top': monitor.y,
+                        'left': monitor.x,
+                        'width': monitor.width,
+                        'height': monitor.height
+                    }
+                }
+                self.available_displays.append(display_info)
+            
+            # Set default display to primary if available, otherwise first display
+            self.current_display = next(
+                (d for d in self.available_displays if d['is_primary']),
+                self.available_displays[0] if self.available_displays else None
+            )
+            
+            # Update combobox values if UI is initialized
+            if hasattr(self, 'display_combobox'):
+                self.update_display_list()
+                
+        except Exception as e:
+            # Fallback to single display mode
+            self.available_displays = [{
+                'id': 0,
+                'name': "Display 1",
+                'width': self.root.winfo_screenwidth(),
+                'height': self.root.winfo_screenheight(),
+                'x': 0,
+                'y': 0,
+                'is_primary': True,
+                'geometry': {
+                    'top': 0,
+                    'left': 0,
+                    'width': self.root.winfo_screenwidth(),
+                    'height': self.root.winfo_screenheight()
+                }
+            }]
+            self.current_display = self.available_displays[0]    
+            
+    def update_display_list(self):
+        """Update the display combobox with current display information"""
+        if self.available_displays:
+            display_names = [
+                f"{d['name']} ({d['width']}x{d['height']})" + 
+                (" (Primary)" if d['is_primary'] else "")
+                for d in self.available_displays
+            ]
+            self.display_combobox['values'] = display_names
+            
+            # Select the current display in the combobox
+            if self.current_display:
+                current_index = next(
+                    (i for i, d in enumerate(self.available_displays) 
+                     if d['id'] == self.current_display['id']), 
+                    0
+                )
+                self.display_combobox.current(current_index)
 
     def toggle_recording(self):
         if self.start_button['text'] == "Start":
@@ -234,7 +319,13 @@ class TimeLapseRecorder:
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f)
         except Exception as e:
-            print(f"Error saving config: {e}")
+            print(f"Error saving config: {e}")    
+            
+    def on_display_change(self, event):
+        """Handle display selection changes"""
+        selected_index = self.display_combobox.current()
+        if selected_index >= 0 and selected_index < len(self.available_displays):
+            self.current_display = self.available_displays[selected_index]
 
     def run(self):
         self.root.mainloop()
