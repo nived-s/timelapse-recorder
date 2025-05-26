@@ -2,58 +2,91 @@ import cv2
 import numpy as np
 import pyautogui
 from PIL import Image
+import threading
+import time
 
-# Set recording options
-output_file = "screen_record_raw.mp4"
-fps = 10  # Record at 10 FPS for performance (or 30 if your system can handle it)
-record_seconds = 300  # Record duration in seconds (e.g., 5 minutes)
 
-# Load the custom cursor image
-cursor_img = Image.open('resources/cursor.png')
-# You can adjust the cursor size if needed
-cursor_size = (24, 24)  # Standard cursor size
-cursor_img = cursor_img.resize(cursor_size)
+class ScreenRecorder:
+    def __init__(self, output_file="screen_record_raw.mp4", fps=10):
+        self.output_file = output_file
+        self.fps = fps
+        self.recording = False
+        self.thread = None
 
-def draw_cursor(screenshot):
-    # Convert screenshot to PIL Image if it's not already
-    if isinstance(screenshot, np.ndarray):
-        screenshot = Image.fromarray(screenshot)
-    
-    # Get current mouse position
-    mouse_x, mouse_y = pyautogui.position()
-    
-    # Create a copy of the screenshot
-    result = screenshot.copy()
-    
-    # Paste the cursor at the current mouse position
-    # Adjust position so cursor point matches mouse position (you might need to adjust these offsets)
-    cursor_x = mouse_x - cursor_size[0]//2
-    cursor_y = mouse_y - cursor_size[1]//2
-    
-    # Paste the cursor with transparency
-    result.paste(cursor_img, (cursor_x, cursor_y), cursor_img)
-    
-    return result
+        # Load the custom cursor image
+        self.cursor_img = Image.open('resources/cursor.png')
+        self.cursor_size = (24, 24)  # Standard cursor size
+        self.cursor_img = self.cursor_img.resize(self.cursor_size)
 
-screen_size = pyautogui.size()
-fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-out = cv2.VideoWriter(output_file, fourcc, fps, screen_size)
+        # Initialize video writer
+        self.screen_size = pyautogui.size()
+        self.fourcc = cv2.VideoWriter_fourcc(*"mp4v")
+        self.out = None
 
-print("Recording started...")
+    def draw_cursor(self, screenshot):
+        # Convert screenshot to PIL Image if it's not already
+        if isinstance(screenshot, np.ndarray):
+            screenshot = Image.fromarray(screenshot)
 
-for _ in range(int(fps * record_seconds)):
-    # Capture screenshot
-    img = pyautogui.screenshot()
-    
-    # Draw custom cursor
-    img = draw_cursor(img)
-    
-    # Convert to numpy array and change color space for OpenCV
-    frame = np.array(img)
-    frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
-    
-    # Write frame to video
-    out.write(frame)
+        # Get current mouse position
+        mouse_x, mouse_y = pyautogui.position()
 
-out.release()
-print("Recording complete.")
+        # Create a copy of the screenshot
+        result = screenshot.copy()
+
+        # Paste the cursor at the current mouse position
+        cursor_x = mouse_x - self.cursor_size[0]//2
+        cursor_y = mouse_y - self.cursor_size[1]//2
+
+        # Paste the cursor with transparency
+        result.paste(self.cursor_img, (cursor_x, cursor_y), self.cursor_img)
+
+        return result
+
+    def record_loop(self):
+        self.out = cv2.VideoWriter(
+            self.output_file, self.fourcc, self.fps, self.screen_size)
+
+        while self.recording:
+            # Capture screenshot
+            img = pyautogui.screenshot()
+
+            # Draw custom cursor
+            img = self.draw_cursor(img)
+
+            # Convert to numpy array and change color space for OpenCV
+            frame = np.array(img)
+            frame = cv2.cvtColor(frame, cv2.COLOR_RGB2BGR)
+
+            # Write frame to video
+            self.out.write(frame)
+
+            # Control FPS
+            time.sleep(1/self.fps)
+
+    def start(self):
+        if not self.recording:
+            self.recording = True
+            self.thread = threading.Thread(target=self.record_loop)
+            self.thread.start()
+
+    def stop(self):
+        if self.recording:
+            self.recording = False
+            if self.thread:
+                self.thread.join()
+            if self.out:
+                self.out.release()
+
+
+# Example of using the ScreenRecorder class
+if __name__ == "__main__":
+    recorder = ScreenRecorder(output_file="my_recording.mp4", fps=15)
+    try:
+        recorder.start()
+        print("Recording... Press Ctrl+C to stop.")
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        recorder.stop()
+        print("Recording stopped.")
