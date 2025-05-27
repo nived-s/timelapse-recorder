@@ -1,7 +1,6 @@
 import cv2
 import os
 
-
 class TimeLapseConverter:
     def __init__(self, speed_factor=10):
         self.speed_factor = speed_factor
