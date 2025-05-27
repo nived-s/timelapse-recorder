@@ -18,7 +18,7 @@ class TimeLapseRecorder:
         self.available_displays = []
         self.current_display = None
         self.screen_capture = mss.mss()
-        
+
         self.root = tk.Tk()
         self.root.title("Time Lapse Recorder")
         self.root.geometry("800x600")
@@ -26,7 +26,8 @@ class TimeLapseRecorder:
         self.recorder = None
 
         # Load saved path from config or use default
-        self.output_path = self.load_config().get('last_path', os.path.join(os.getcwd(), 'recordings'))
+        self.output_path = self.load_config().get(
+            'last_path', os.path.join(os.getcwd(), 'recordings'))
 
         # Initialize timelapse converter
         self.converter = TimeLapseConverter(speed_factor=10)
@@ -46,13 +47,14 @@ class TimeLapseRecorder:
         self.main_frame.columnconfigure(0, weight=1)
         self.main_frame.columnconfigure(1, weight=0)
         self.main_frame.rowconfigure(0, weight=1)
+        # Create display area with 16:9 aspect ratio
         self.main_frame.rowconfigure(1, weight=0)
-
-        # Create display area (using Canvas for now, will be replaced with actual display later)
         self.display_area = tk.Canvas(
             self.main_frame, bg='#000', width=780, height=450)
         self.display_area.grid(row=0, column=0, columnspan=2, sticky=(
             tk.W, tk.E, tk.N, tk.S), pady=(20, 30), padx=20)
+        # Ensure minimum size
+        self.display_area.update()  # Force geometry update
 
         # Add a separator for visual separation
         separator = ttk.Separator(self.main_frame, orient='horizontal')
@@ -75,16 +77,21 @@ class TimeLapseRecorder:
         # Will be populated with actual displays later
         self.display_combobox['values'] = ['Display 1']
         self.display_combobox.set('Display 1')
-        self.display_combobox.grid(row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
-          # Bind display selection change
-        self.display_combobox.bind('<<ComboboxSelected>>', self.on_display_change)
-        
-        # Initialize displays after creating combobox
+        self.display_combobox.grid(
+            row=0, column=0, sticky=(tk.W, tk.E), padx=(0, 10))
+         # Bind display selection change
+        self.display_combobox.bind(
+            '<<ComboboxSelected>>', self.on_display_change)
+         # Initialize displays after creating combobox
         self.initialize_displays()
-        
+
+        # Start preview loop
+        self.start_preview_loop()
+
         # Create path selection label and entry
         self.path_label = ttk.Label(self.controls_frame, text="Output Path:")
-        self.path_label.grid(row=1, column=0, sticky=tk.W, padx=(0, 10), pady=(10, 0))
+        self.path_label.grid(row=1, column=0, sticky=tk.W,
+                             padx=(0, 10), pady=(10, 0))
 
         # Create a frame for path entry and browse button
         self.path_frame = ttk.Frame(self.controls_frame)
@@ -124,14 +131,14 @@ class TimeLapseRecorder:
 
         # Configure controls frame grid
         self.controls_frame.columnconfigure(0, weight=1)
-        self.controls_frame.columnconfigure(1, weight=0)    
-    
+        self.controls_frame.columnconfigure(1, weight=0)
+
     def initialize_displays(self):
         """Initialize and store information about all available displays"""
         try:
             # Get all monitors using screeninfo
             monitors = get_monitors()
-            
+
             # Store display information
             self.available_displays = []
             for i, monitor in enumerate(monitors):
@@ -151,17 +158,33 @@ class TimeLapseRecorder:
                     }
                 }
                 self.available_displays.append(display_info)
-            
-            # Set default display to primary if available, otherwise first display
-            self.current_display = next(
-                (d for d in self.available_displays if d['is_primary']),
-                self.available_displays[0] if self.available_displays else None
-            )
-            
+
+            # Load saved display from config or use primary/first display as fallback
+            config = self.load_config()
+            saved_display = config.get('display')
+
+            if saved_display:
+                # Try to find the saved display in available displays
+                self.current_display = next(
+                    (d for d in self.available_displays
+                     if d['width'] == saved_display['width']
+                     and d['height'] == saved_display['height']
+                     and d['x'] == saved_display['x']
+                     and d['y'] == saved_display['y']),
+                    None
+                )
+
+            # If no saved display or it's no longer available, use primary or first
+            if not self.current_display:
+                self.current_display = next(
+                    (d for d in self.available_displays if d['is_primary']),
+                    self.available_displays[0] if self.available_displays else None
+                )
+
             # Update combobox values if UI is initialized
             if hasattr(self, 'display_combobox'):
                 self.update_display_list()
-                
+
         except Exception as e:
             # Fallback to single display mode
             self.available_displays = [{
@@ -179,23 +202,23 @@ class TimeLapseRecorder:
                     'height': self.root.winfo_screenheight()
                 }
             }]
-            self.current_display = self.available_displays[0]    
-            
+            self.current_display = self.available_displays[0]
+
     def update_display_list(self):
         """Update the display combobox with current display information"""
         if self.available_displays:
             display_names = [
-                f"{d['name']} ({d['width']}x{d['height']})" + 
+                f"{d['name']} ({d['width']}x{d['height']})" +
                 (" (Primary)" if d['is_primary'] else "")
                 for d in self.available_displays
             ]
             self.display_combobox['values'] = display_names
-            
+
             # Select the current display in the combobox
             if self.current_display:
                 current_index = next(
-                    (i for i, d in enumerate(self.available_displays) 
-                     if d['id'] == self.current_display['id']), 
+                    (i for i, d in enumerate(self.available_displays)
+                     if d['id'] == self.current_display['id']),
                     0
                 )
                 self.display_combobox.current(current_index)
@@ -230,19 +253,26 @@ class TimeLapseRecorder:
 
         # Create temporary file for raw recording
         temp_file = os.path.join(output_dir, f'temp_{current_time}.mp4')
+        self.recorder = ScreenRecorder(
+            output_file=temp_file,
+            fps=10,
+            capture_region={
+                'left': self.current_display['x'],
+                'top': self.current_display['y'],
+                'width': self.current_display['width'],
+                'height': self.current_display['height']
+            }
+        )
         self.current_recording_path = temp_file
 
-        # Initialize recorder with temporary file
-        self.recorder = ScreenRecorder(output_file=temp_file, fps=10)
-
-        # Start recording
+            # Start recording
         self.recorder.start()
 
         # Update button text and colors
         self.start_button['text'] = "Stop"
         self.start_button['bg'] = '#f44336'  # Material Design Red
-        self.start_button['activebackground'] = '#d32f2f'
-
+        self.start_button['activebackground'] = '#d32f2f'    
+        
     def stop_recording(self):
         if self.recorder:
             self.recorder.stop()
@@ -269,8 +299,8 @@ class TimeLapseRecorder:
         # Update button text and colors
         self.start_button['text'] = "Start"
         self.start_button['bg'] = '#4CAF50'  # Material Design Green
-        self.start_button['activebackground'] = '#45a049'
-
+        self.start_button['activebackground'] = '#45a049'    
+        
     def browse_directory(self):
         directory = filedialog.askdirectory(
             initialdir=self.path_var.get(),
@@ -308,28 +338,106 @@ class TimeLapseRecorder:
                     return json.load(f)
         except Exception as e:
             print(f"Error loading config: {e}")
-        return {}
-
+        return {}    
+    
     def save_config(self):
         """Save configuration to file"""
         try:
+            # Save both path and display settings
             config = {
-                'last_path': self.path_var.get()
+                'last_path': self.path_var.get(),
+                'display': {
+                    'id': self.current_display['id'],
+                    'name': self.current_display['name'],
+                    'width': self.current_display['width'],
+                    'height': self.current_display['height'],
+                    'x': self.current_display['x'],
+                    'y': self.current_display['y']
+                } if self.current_display else None
             }
             with open(CONFIG_FILE, 'w') as f:
                 json.dump(config, f)
         except Exception as e:
-            print(f"Error saving config: {e}")    
-            
+            print(f"Error saving config: {e}")
+
     def on_display_change(self, event):
         """Handle display selection changes"""
         selected_index = self.display_combobox.current()
         if selected_index >= 0 and selected_index < len(self.available_displays):
             self.current_display = self.available_displays[selected_index]
+            # Force an immediate preview update
+            self.capture_and_show_preview()
+            # Save the display preference
+            self.save_config()
+
+    def capture_and_show_preview(self):
+        """Capture current display and show preview in canvas"""
+        if not self.current_display:
+            return
+
+        try:
+            # Capture the screen
+            screenshot = self.screen_capture.grab(
+                self.current_display['geometry'])
+
+            # Convert to PIL Image
+            img = Image.frombytes('RGB', screenshot.size, screenshot.rgb)
+            # Calculate scaling to fit canvas while maintaining aspect ratio
+            canvas_width = self.display_area.winfo_width() or 780  # Default if 0
+            canvas_height = self.display_area.winfo_height() or 450  # Default if 0
+            img_width, img_height = img.size
+
+            # Calculate scale factor to fit in canvas
+            scale_width = canvas_width / img_width if img_width > 0 else 1
+            scale_height = canvas_height / img_height if img_height > 0 else 1
+            scale = min(scale_width, scale_height)
+
+            # Calculate new dimensions
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+
+            # Resize image
+            img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+            # Convert to PhotoImage
+            photo = ImageTk.PhotoImage(img)
+
+            # Update canvas
+            self.display_area.delete("all")  # Clear previous content
+
+            # Calculate position to center the image
+            x = (canvas_width - new_width) // 2
+            y = (canvas_height - new_height) // 2
+
+            # Store reference to avoid garbage collection
+            self.current_preview = photo
+
+            # Show image on canvas
+            self.display_area.create_image(x, y, image=photo, anchor="nw")
+
+        except Exception as e:
+            print(f"Error updating preview: {e}")
+
+    def start_preview_loop(self):
+        """Start the preview refresh loop"""
+        if not hasattr(self, 'preview_running'):
+            self.preview_running = True
+            self.update_preview()
+
+    def stop_preview_loop(self):
+        """Stop the preview refresh loop"""
+        self.preview_running = False
+
+    def update_preview(self):
+        """Update the preview if not recording"""
+        if hasattr(self, 'preview_running') and self.preview_running:
+            if not self.recorder:  # Only update when not recording
+                self.capture_and_show_preview()
+                # Schedule next update (30fps = ~33ms)
+                self.root.after(33, self.update_preview)
 
     def run(self):
         self.root.mainloop()
-
 
 if __name__ == "__main__":
     app = TimeLapseRecorder()
