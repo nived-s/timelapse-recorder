@@ -7,17 +7,16 @@ import time
 import win32gui
 import win32api
 
-
-class ScreenRecorder: 
+class ScreenRecorder:
     def __init__(self, output_file="screen_record_raw.mp4", fps=10, capture_region=None):
         # Store capture region
         self.capture_region = capture_region or {
-            'left': 0, 
+            'left': 0,
             'top': 0,
             'width': win32api.GetSystemMetrics(0),  # screen width
             'height': win32api.GetSystemMetrics(1)  # screen height
         }
-        
+
         self.output_file = output_file
         self.fps = fps
         self.recording = False
@@ -31,35 +30,38 @@ class ScreenRecorder:
         # Standard HD output size
         self.output_size = (1920, 1080)
         self.fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-        self.out = None 
-        
+        self.out = None
+
     def draw_cursor(self, img):
         """Draw cursor on the image with proper position calculation"""
         try:
             # Get current cursor position as tuple (x, y)
             cursor_pos = win32gui.GetCursorPos()
-            
+
             # Calculate cursor position relative to capture region
             cursor_x = cursor_pos[0] - self.capture_region['left']
             cursor_y = cursor_pos[1] - self.capture_region['top']
-            
+
             # Check if cursor is within capture region
-            if (0 <= cursor_x < self.capture_region['width'] and 
-                0 <= cursor_y < self.capture_region['height']):
-                
+            if (0 <= cursor_x < self.capture_region['width'] and
+                    0 <= cursor_y < self.capture_region['height']):
+
                 # Create a copy of the image
                 result = img.copy()
                 # Paste cursor at the adjusted position
-                result.paste(self.cursor_img, (int(cursor_x), int(cursor_y)), self.cursor_img)
+                result.paste(self.cursor_img, (int(cursor_x),
+                             int(cursor_y)), self.cursor_img)
                 return result
-            
+
             return img  # Return original image if cursor is outside
-            
+
         except Exception as e:
             print(f"Error drawing cursor: {e}")
             return img  # Return original image if there's an error
-    
+
     def record_loop(self):
+        import mss  # Ensure mss is imported in the thread context
+        sct = mss.mss()  # Create a new mss instance for this thread
         self.out = cv2.VideoWriter(
             self.output_file, self.fourcc, self.fps, self.output_size)
 
@@ -68,13 +70,15 @@ class ScreenRecorder:
 
         while self.recording:
             current_time = time.time()
-            # Use self.capture_region instead of self.region
-            img = pyautogui.screenshot(region=(
-                self.capture_region['left'],
-                self.capture_region['top'],
-                self.capture_region['width'],
-                self.capture_region['height']
-            ))
+            # Use mss for screenshot
+            monitor = {
+                "left": self.capture_region['left'],
+                "top": self.capture_region['top'],
+                "width": self.capture_region['width'],
+                "height": self.capture_region['height']
+            }
+            sct_img = sct.grab(monitor)
+            img = Image.frombytes('RGB', sct_img.size, sct_img.rgb)
 
             # Draw custom cursor (adjusted for region)
             img = self.draw_cursor(img)
