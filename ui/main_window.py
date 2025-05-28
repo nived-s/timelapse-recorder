@@ -40,7 +40,7 @@ class MainWindow:
 
         # Controls
         self.controls = ControlsFrame(
-            self.main_frame, config_manager, display_manager, recorder, timelapse_converter, self.preview)
+            self.main_frame, config_manager, display_manager, self.preview)
         self.controls.frame.grid(row=2, column=0, columnspan=2, sticky=(
             tk.W, tk.E), padx=20, pady=(0, 20))
         self.main_frame.columnconfigure(0, weight=1)

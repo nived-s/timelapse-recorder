@@ -4,15 +4,15 @@ import os
 import time
 from PIL import Image, ImageTk
 import win32gui
+from core.timelapse import TimeLapseScreenRecorder
+import threading
 
 
 class ControlsFrame:
-    def __init__(self, parent, config_manager, display_manager, recorder, timelapse_converter, preview):
+    def __init__(self, parent, config_manager, display_manager, preview):
         self.frame = ttk.Frame(parent)
         self.config_manager = config_manager
         self.display_manager = display_manager
-        self.recorder = recorder
-        self.timelapse_converter = timelapse_converter
         self.preview = preview
         self.available_displays = self.display_manager.get_available_displays()
         self.current_display = self.display_manager.get_current_display()
@@ -20,6 +20,7 @@ class ControlsFrame:
             'last_path', os.path.join(os.getcwd(), 'recordings'))
         self.current_recording_path = None
         self.preview_running = True
+        self.recorder = None
 
         # Load the custom cursor image for preview
         self.cursor_img = Image.open('resources/cursor.png').resize((24, 24))
@@ -120,17 +121,15 @@ class ControlsFrame:
                 "Error", "Output directory is not writable. Please select another location.")
             return
         current_time = time.strftime("%H%M%S_%d%m%y")
-        temp_file = os.path.join(output_dir, f'temp_{current_time}.mp4')
-        self.recorder.output_file = temp_file
-        self.recorder.fps = 10
-        self.recorder.capture_region = {
-            'left': self.current_display['x'],
-            'top': self.current_display['y'],
-            'width': self.current_display['width'],
-            'height': self.current_display['height']
-        }
-        self.current_recording_path = temp_file
-        self.recorder.start()
+        output_file = os.path.join(output_dir, f'timelapse_{current_time}.mp4')
+        # mss uses 1-based index
+        monitor_index = self.current_display['id'] + 1
+        self.recorder = TimeLapseScreenRecorder(
+            interval_seconds=2, output_fps=30, monitor=monitor_index)
+        self.recording_thread = threading.Thread(
+            target=self.recorder.record, args=(output_file,))
+        self.recording_thread.start()
+        self.current_recording_path = output_file
         self.start_button['text'] = "Stop"
         self.start_button['bg'] = '#f44336'
         self.start_button['activebackground'] = '#d32f2f'
@@ -138,17 +137,10 @@ class ControlsFrame:
     def stop_recording(self):
         if self.recorder:
             self.recorder.stop()
-            if self.current_recording_path and os.path.exists(self.current_recording_path):
-                try:
-                    final_file = self.current_recording_path.replace(
-                        'temp_', 'timelapse_')
-                    self.timelapse_converter.convert(
-                        self.current_recording_path, final_file)
-                    os.remove(self.current_recording_path)
-                except Exception as e:
-                    print(f"Error creating timelapse: {e}")
-            self.recorder = None
-            self.current_recording_path = None
+            if hasattr(self, 'recording_thread'):
+                self.recording_thread.join()
+        self.recorder = None
+        self.current_recording_path = None
         self.start_button['text'] = "Start"
         self.start_button['bg'] = '#4CAF50'
         self.start_button['activebackground'] = '#45a049'
@@ -185,9 +177,10 @@ class ControlsFrame:
             cursor_x = cursor_pos[0] - self.current_display['x']
             cursor_y = cursor_pos[1] - self.current_display['y']
             if (0 <= cursor_x < self.current_display['width'] and
-                0 <= cursor_y < self.current_display['height']):
+                    0 <= cursor_y < self.current_display['height']):
                 result = img.copy()
-                result.paste(self.cursor_img, (int(cursor_x), int(cursor_y)), self.cursor_img)
+                result.paste(self.cursor_img, (int(cursor_x),
+                             int(cursor_y)), self.cursor_img)
                 return result
             return img
         except Exception as e:
