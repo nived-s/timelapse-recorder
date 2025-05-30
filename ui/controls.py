@@ -199,3 +199,25 @@ class ControlsFrame:
             if not getattr(self.recorder, 'is_recording', False):
                 self.capture_and_show_preview()
             self.frame.after(33, self.update_preview)
+
+    def add_speed_slider(self, initial_value=10, min_value=1, max_value=60, callback=None, slider_length=380):
+        # Speed Factor Slider
+        self.speed_var = tk.DoubleVar(value=initial_value)
+        # Place label below the path selector, normal weight
+        speed_label = ttk.Label(self.frame, text="Speed Factor:")
+        speed_label.grid(row=5, column=0, sticky=tk.W, pady=(10, 0))
+        # Slider matches the width shown in the screenshot, value label right next to it
+        self.speed_slider = ttk.Scale(
+            self.frame,
+            from_=min_value,
+            to=max_value,
+            orient='horizontal',
+            variable=self.speed_var,
+            command=callback,
+            length=320  # Adjusted to match the screenshot's slider width
+        )
+        self.speed_slider.grid(row=6, column=0, sticky=(
+            tk.W), padx=(0, 0), pady=(0, 10))
+        self.speed_value_label = ttk.Label(
+            self.frame, textvariable=self.speed_var, width=5)
+        self.speed_value_label.grid(row=6, column=1, sticky=tk.W, pady=(0, 10))

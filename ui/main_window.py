@@ -46,5 +46,18 @@ class MainWindow:
         self.main_frame.columnconfigure(0, weight=1)
         self.main_frame.columnconfigure(1, weight=0)
 
+        # Add speed factor slider below controls
+        self.controls.add_speed_slider(
+            initial_value=timelapse_converter.speed_factor,
+            min_value=1,
+            max_value=60,
+            callback=self.on_speed_change,
+            slider_length=180  # Set a reasonable width for the slider
+        )
+
+    def on_speed_change(self, event=None):
+        # Placeholder for now, will connect to timelapse_converter in next step
+        pass
+
     def run(self):
         self.root.mainloop()
